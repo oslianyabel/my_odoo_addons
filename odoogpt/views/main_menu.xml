@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="odoogpt_menu" name="OdooGPT" parent="base.menu_administration" sequence="10"/>
+</odoo>

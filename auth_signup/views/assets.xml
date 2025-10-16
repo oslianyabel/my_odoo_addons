@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="password_validation_css" model="ir.asset">
+            <field name="name">Auth Signup Password Validation CSS</field>
+            <field name="bundle">web.assets_frontend</field>
+            <field name="path">auth_signup/static/src/css/password_validation.css</field>
+        </record>
+        
+        <record id="signup_js" model="ir.asset">
+            <field name="name">Auth Signup JavaScript</field>
+            <field name="bundle">web.assets_frontend</field>
+            <field name="path">auth_signup/static/src/js/signup.js</field>
+        </record>
+    </data>
+</odoo>
