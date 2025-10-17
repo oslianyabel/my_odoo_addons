@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_odoogpt_table,access_odoogpt_table,model_odoogpt_table,base.group_user,1,1,1,1
+access_odoogpt_table_admin,access_odoogpt_table_admin,model_odoogpt_table,base.group_system,1,1,1,1

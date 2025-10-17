@@ -1,0 +1,23 @@
+Hallazgos
+    - eliminar dependencia a queue_jobs (with_delay())
+    - clave api de openai hardcodeada
+    - herencia a mail_channel en lugar de discuss_channel
+    - No usar flanker
+
+pedir
+    credenciales correo
+    formatear respuesta en odoo
+    formato de numeros de telefono
+
+Tareas
+    comprobar integridad de modulos comparando con repo oficial
+    calendar_bot: update and delete
+    project-task bot
+    crear lead
+    migrar a odoo 18
+    envio/recibo de documentos
+    
+
+odoo.conf
+server_wide_modules = web,queue_job
+workers = 2

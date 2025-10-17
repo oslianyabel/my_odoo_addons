@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="odoogpt_table_view_tree" model="ir.ui.view">
+        <field name="name">odoogpt.table.view.tree</field>
+        <field name="model">odoogpt.table</field>
+        <field name="arch" type="xml">
+            <tree string="OdooGPT Table" editable="bottom">
+                <field name="name"/>
+                <field name="description"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="odoogpt_table_action" model="ir.actions.act_window">
+        <field name="name">OdooGPT table</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">odoogpt.table</field>
+        <field name="view_mode">tree</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_empty_folder">
+                OdooGPT
+            </p><p>
+                Create a custom table description
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="odoogpt_table_menu" name="OdooGPT table" parent="odoogpt_menu"
+            action="odoogpt_table_action" sequence="10"/>
+</odoo>

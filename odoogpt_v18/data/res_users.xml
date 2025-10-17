@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="odoogpt_user" model="res.users">
+            <field name="partner_id" ref="odoogpt.partner_odoogpt"/>
+            <field name="company_id" ref="base.main_company"/>
+            <field name="company_ids" eval="[Command.link(ref('base.main_company'))]"/>
+            <field name="login">odoogpt@example.com</field>
+            <field name="signature"><![CDATA[<span>-- <br/>OdooGPT</span>]]></field>
+            <field eval="[(4,ref('base.group_system'))]" name="groups_id"/>
+        </record>
+    </data>
+</odoo>

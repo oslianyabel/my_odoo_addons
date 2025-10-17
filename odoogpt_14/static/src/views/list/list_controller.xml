@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates id="template" xml:space="preserve">
+<t t-name="ListView.buttons" t-extend="ListView.buttons">
+    <t t-jquery="div.o_list_buttons" t-operation="append">
+        <button type="button" class="btn btn-secondary fa fa-comments o_list_button_desoft_bot" title="OdooGPT" accesskey="p"/>
+    </t>
+</t>
+</templates>
