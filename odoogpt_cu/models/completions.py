@@ -2,14 +2,15 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
 
-from .enumerations import MessageType, ModelType
-from .prompt import SYSTEM_PROMPT, JSON_TOOLS
-from .tools import tools_func
+from .enumerations import EffortType, MessageType, ModelType, VerbosityType
+from .prompt import SYSTEM_PROMPT
+from .proxy_config import ProxyConfig
 
 _logger = logging.getLogger(__name__)
 load_dotenv(".env")
@@ -23,20 +24,25 @@ class GetMessagesError(Exception):
     pass
 
 
+class FunctionDoesNotExist(Exception):
+    pass
+
+
 class ChatMemory:
     def __init__(self, prompt=SYSTEM_PROMPT):
-        self.__ai_output: Dict[int, Any] = {}
-        self.__messages: Dict[int, List[dict]] = {}
-        self.__pos_tool_msgs: Dict[int, List[int]] = {}
+        self.__ai_output: dict[int, Any] = {}
+        self.__messages: dict[int, list[dict]] = {}
+        self.__pos_tool_msgs: dict[int, list[int]] = {}
         self.init_msg = {
             "role": MessageType.SYSTEM.value,
             "content": prompt,
         }
-        self.__last_time: float = 0.0
+        self.__last_time: float
 
     def _get_ai_output(self, user_id: int):
         if user_id not in self.__ai_output:
             raise GetMessagesError(f"{user_id} not found in memory")
+
         return self.__ai_output[user_id]
 
     def _get_pos_tool_msgs(self, user_id: int):
@@ -107,6 +113,7 @@ class ChatMemory:
     def _clean_tool_msgs(self, user_id: int):
         if user_id not in self.__pos_tool_msgs:
             _logger.warning(f"{user_id} not have tool messages")
+
         self.__pos_tool_msgs[user_id] = []
 
     def has_chat(self, user_id: int) -> bool:
@@ -143,7 +150,7 @@ class ChatMemory:
         )
         return False
 
-    def set_messages(self, messages: List[Dict[str, str]], user_id: int):
+    def set_messages(self, messages: list[dict[str, str]], user_id: int):
         if not isinstance(messages, list):
             raise SetMessagesError(f"messages must be a list, not {type(messages)}")
 
@@ -157,8 +164,7 @@ class ChatMemory:
 
     def _get_ai_msg(self, user_id: int):
         ai_output = self._get_ai_output(user_id)
-        content = ai_output.choices[0].message.content
-        return content.strip() if content else ""
+        return ai_output.choices[0].message.content.strip()
 
     def _purge_tool_msgs(self, user_id: int):
         pos_tool_msgs = self._get_pos_tool_msgs(user_id)
@@ -205,35 +211,43 @@ class ChatMemory:
 
 
 class AIClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, base_url: str, proxy_url: Optional[str] = None):
         """
-        Initialize AI Client.
+        Initialize AI Client with optional proxy support.
 
         Args:
             api_key: OpenAI API key
+            base_url: Custom base URL for API
+            proxy_url: HTTP proxy URL in format: http://username:password@host:port
         """
-        self.api_key = api_key
-        self.__client = None
-        self.__async_client = None
+        if proxy_url:
+            self.proxy_config = ProxyConfig(proxy_url)
+            http_client = None
+            async_http_client = None
 
-    def _get_client(self):
-        if self.__client is None:
-            self.__client = OpenAI(api_key=self.api_key)
-        return self.__client
+            if self.proxy_config.proxy_url and self.proxy_config.is_valid:
+                http_client = self.proxy_config.create_sync_client()
+                async_http_client = self.proxy_config.create_async_client()
+                _logger.info(f"Proxy configured: {self.proxy_config.get_proxy_info()}")
 
-    def _get_async_client(self):
-        if self.__async_client is None:
-            self.__async_client = AsyncOpenAI(api_key=self.api_key)
-        return self.__async_client
+                self.__client = OpenAI(
+                    api_key=api_key, base_url=base_url, http_client=http_client
+                )
+                self.__async_client = AsyncOpenAI(
+                    api_key=api_key, base_url=base_url, http_client=async_http_client
+                )
+                return
+
+        _logger.info("No proxy configured or invalid proxy URL")
+        self.__client = OpenAI(api_key=api_key, base_url=base_url)
+        self.__async_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
     async def _async_gen_ai_output(self, params: dict):
-        client = self._get_async_client()
-        ai_output = await client.chat.completions.create(**params)
+        ai_output = await self.__async_client.client.chat.completions.create(**params)
         return ai_output
 
     def _gen_ai_output(self, params: dict):
-        client = self._get_client()
-        return client.chat.completions.create(**params)
+        return self.__client.chat.completions.create(**params)
 
 
 class ToolRunner:
@@ -251,48 +265,58 @@ class ToolRunner:
         chat_memory: ChatMemory,
         odoo_manager,
         odoogpt,
+        rag_functions,
     ) -> None:
         _logger.info(f"{len(functions_called)} functions need to be called!")
 
-        # Execute functions synchronously one by one
-        for tool in functions_called:
-            function_name = tool.function.name
-            function_args_str = tool.function.arguments
-            _logger.info(f"function_name: {function_name}")
-            _logger.debug(
-                f"function_args: {function_args_str[:100]}{'...' if len(function_args_str) > 100 else ''}"
-            )
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for tool in functions_called:
+                function_name = tool.function.name
+                function_args = tool.function.arguments
+                _logger.info(f"function_name: {function_name}")
+                _logger.debug(
+                    f"function_args: {function_args[:100]}{'...' if len(function_args) > 100 else ''}"
+                )
 
-            # Parse function arguments, handle empty or null cases
-            if function_args_str and function_args_str.strip():
-                extra_args = json.loads(function_args_str)
-            else:
-                extra_args = {}
+                if function_name not in rag_functions:
+                    raise FunctionDoesNotExist(
+                        f"{function_name} not available in {rag_functions.keys()}"
+                    )
 
-            function_args = {
-                **extra_args,
-                "odoogpt": odoogpt,
-                "channel_id": channel_obj,
-                "odoo_manager": odoo_manager,
-            }
+                # Parse function arguments, handle empty or null cases
+                if function_args and function_args.strip():
+                    extra_args = json.loads(function_args)
+                else:
+                    extra_args = {}
+                
+                function_args = {
+                    **extra_args,
+                    "odoogpt": odoogpt,
+                    "channel_id": channel_obj,
+                    "odoo_manager": odoo_manager,
+                }
 
-            if function_name == "create_lead":
-                function_args["chat"] = chat_memory.get_messages(user_id)
+                if function_name == "create_lead":
+                    function_args["chat"] = chat_memory.get_messages(user_id)
 
-            function_to_call = tools_func[function_name]
-            
-            # Execute function synchronously
+                function_to_call = rag_functions[function_name]
+                futures.append(executor.submit(function_to_call, **function_args))
+
+            self.run_futures(futures, functions_called, user_id, chat_memory)
+
+    def run_futures(self, futures, tools_called, user_id: int, chat_memory: ChatMemory):
+        for future, tool in zip(futures, tools_called):
             try:
-                function_out = function_to_call(**function_args)
-                _logger.info(f"{function_name}: {function_out}")
+                function_out = future.result()
+                _logger.info(f"{tool.function.name}: {function_out}")  # type: ignore
             except Exception as exc:
-                _logger.error(f"{function_name}: {exc}")
+                _logger.error(f"{tool.function.name}: {exc}")
                 function_out = self.ERROR_MSG
 
             chat_memory._set_tool_output(
-                tool.id, function_out, user_id, function_name
+                tool.id, function_out, user_id, tool.function.name
             )
-
 
     async def _async_run_functions(
         self,
@@ -302,23 +326,29 @@ class ToolRunner:
         chat_memory: ChatMemory,
         odoo_manager,
         odoogpt,
+        rag_functions,
     ) -> None:
         _logger.info(f"{len(functions_called)} function need to be called!")
         tasks = []
         for tool in functions_called:
             function_name = tool.function.name
-            function_args_str = tool.function.arguments
+            function_args = tool.function.arguments
             _logger.info(f"function_name: {function_name}")
             _logger.debug(
-                f"function_args: {function_args_str[:100]}{'...' if len(function_args_str) > 100 else ''}"
+                f"function_args: {function_args[:100]}{'...' if len(function_args) > 100 else ''}"
             )
 
+            if function_name not in rag_functions:
+                raise FunctionDoesNotExist(
+                    f"{function_name} not available in {rag_functions.keys()}"
+                )
+
             # Parse function arguments, handle empty or null cases
-            if function_args_str and function_args_str.strip():
-                extra_args = json.loads(function_args_str)
+            if function_args and function_args.strip():
+                extra_args = json.loads(function_args)
             else:
                 extra_args = {}
-
+            
             function_args = {
                 **extra_args,
                 "odoogpt": odoogpt,
@@ -329,7 +359,7 @@ class ToolRunner:
             if function_name == "create_lead":
                 function_args["chat"] = chat_memory.get_messages(user_id)
 
-            function_to_call = tools_func[function_name]
+            function_to_call = rag_functions[function_name]  # type: ignore
             tasks.append(function_to_call(**function_args))
 
         await self.run_coroutines(functions_called, tasks, user_id, chat_memory)
@@ -342,9 +372,9 @@ class ToolRunner:
         for tool, function_out in zip(tools_called, results):
             if isinstance(function_out, Exception):
                 _logger.error(f"{tool.function.name}: {function_out}")
-                function_out = self.ERROR_MSG
+                function_out = self.ERROR_MSG  # type: ignore
             else:
-                _logger.info(f"{tool.function.name}: {function_out}")
+                _logger.info(f"{tool.function.name}: {function_out}")  # type: ignore
 
             chat_memory._set_tool_output(
                 tool.id, function_out, user_id, tool.function.name
@@ -354,14 +384,22 @@ class ToolRunner:
 class Agent:
     def __init__(
         self,
-        name="Odoo Agent",
-        model=ModelType.GPT_4_1.value,
+        api_key,
+        base_url,
+        proxy_url=None,
+        name="OdooGPT",
+        model=ModelType.AGENT_MD.value,
         prompt=SYSTEM_PROMPT,
     ):
         self.name = name
         self.model = model
         self.chat_memory = ChatMemory(prompt=prompt)
-        self._ai_client = AIClient(os.getenv("OPENAI_API_KEY"))
+
+        self._ai_client = AIClient(
+            api_key=api_key,
+            base_url=base_url,
+            proxy_url=proxy_url,
+        )
         self._tool_runner = ToolRunner()
 
     def process_msg(
@@ -371,25 +409,40 @@ class Agent:
         channel_obj,
         odoo_manager=None,
         odoogpt=None,
-    ) -> Optional[str]:
-        _logger.info(f"Running {self.model} with {len(JSON_TOOLS)} tools")
+        rag_functions: dict = {},
+        rag_prompt: list[dict] = [],
+        tool_execution_callback=None,
+    ) -> str | None:
+        _logger.info(f"Running {self.model} with {len(rag_prompt)} tools")
         self.chat_memory.add_msg(message, MessageType.USER.value, user_id)
-
         counter: int = 1
+
         while True:
             _logger.info(f"{counter}° iteration")
 
             params = {
-                "model": self.model,
-                "messages": self.chat_memory.get_messages(user_id),
-                "tools": JSON_TOOLS,
+                "model": self.model,  # type: ignore
+                "messages": self.chat_memory.get_messages(user_id),  # type: ignore
+                "tools": rag_prompt,  # type: ignore
             }
+            if self.model == ModelType.GPT_5.value:  # type: ignore
+                params["text"] = {"verbosity": VerbosityType.LOW.value}
+                params["reasoning"] = {"effort": EffortType.LOW.value}
 
+            # print(self.chat_memory.get_messages(user_id, with_prompt=False))
             ai_output = self._ai_client._gen_ai_output(params)
             self.chat_memory._set_ai_output(ai_output, user_id)
 
             if not ai_output.choices[0].message.tool_calls:
                 break
+
+            # Call the callback with the assistant's message before tool execution
+            if tool_execution_callback and ai_output.choices[0].message.content:
+                tool_execution_callback(
+                    channel_id=channel_obj,
+                    odoogpt=odoogpt,
+                    message=ai_output.choices[0].message.content,
+                )
 
             self.chat_memory._set_tool_calls(user_id)
 
@@ -400,6 +453,7 @@ class Agent:
                 self.chat_memory,
                 odoo_manager,
                 odoogpt,
+                rag_functions,
             )
 
             counter += 1
@@ -425,8 +479,11 @@ class Agent:
         channel_obj,
         odoo_manager=None,
         odoogpt=None,
-    ) -> Optional[str]:
-        _logger.info(f"Running {self.name} with {len(JSON_TOOLS)} tools")
+        rag_functions: dict = {},
+        rag_prompt: list[dict] = [],
+        tool_execution_callback=None,
+    ) -> str | None:
+        _logger.info(f"Running {self.name} with {len(rag_prompt)} tools")
         self.chat_memory.add_msg(message, MessageType.USER.value, user_id)
 
         counter: int = 1
@@ -434,16 +491,27 @@ class Agent:
             _logger.info(f"{counter}° iteration")
 
             params = {
-                "model": self.model,
-                "messages": self.chat_memory.get_messages(user_id),
-                "tools": JSON_TOOLS,
+                "model": self.model,  # type: ignore
+                "messages": self.chat_memory.get_messages(user_id),  # type: ignore
+                "tools": rag_prompt,  # type: ignore
             }
+            if self.model == ModelType.GPT_5.value:  # type: ignore
+                params["text"] = {"verbosity": VerbosityType.LOW.value}
+                params["reasoning"] = {"effort": EffortType.MINIMAL.value}
 
             ai_output = await self._ai_client._async_gen_ai_output(params)
             self.chat_memory._set_ai_output(ai_output, user_id)
 
             if not ai_output.choices[0].message.tool_calls:
                 break
+
+            # Call the callback with the assistant's message before tool execution
+            if tool_execution_callback and ai_output.choices[0].message.content:
+                tool_execution_callback(
+                    channel_id=channel_obj,
+                    odoogpt=odoogpt,
+                    message=ai_output.choices[0].message.content,
+                )
 
             self.chat_memory._set_tool_calls(user_id)
 
@@ -454,6 +522,7 @@ class Agent:
                 self.chat_memory,
                 odoo_manager,
                 odoogpt,
+                rag_functions,
             )
 
             counter += 1
@@ -467,21 +536,9 @@ class Agent:
         return ai_msg
 
 
-# Lazy initialization - agent se crea cuando se necesita
-_agent_instance = None
-
-
-def get_agent():
-    global _agent_instance
-    if _agent_instance is None:
-        _agent_instance = Agent()
-    return _agent_instance
-
-
-# Para compatibilidad con código existente
-class AgentProxy:
-    def __getattr__(self, name):
-        return getattr(get_agent(), name)
-
-
-agent = AgentProxy()
+agent = Agent(
+    api_key=os.getenv("AVANGENIO_API_KEY"),
+    base_url="https://apigateway.avangenio.net",
+    proxy_url=os.getenv("HTTP_PROXY"),
+    model=ModelType.AGENT_MD.value,
+)

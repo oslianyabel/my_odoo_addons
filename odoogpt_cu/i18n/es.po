@@ -1,0 +1,109 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* odoogpt
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 16.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2023-05-20 02:33+0000\n"
+"PO-Revision-Date: 2023-05-20 02:33+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: odoogpt
+#: model:ir.model.fields,field_description:odoogpt.field_res_users__odoogpt_api_key
+msgid "API Key"
+msgstr ""
+
+#. module: odoogpt
+#: model_terms:ir.ui.view,arch_db:odoogpt.view_users_form_simple_modif
+msgid "Chat GPT"
+msgstr ""
+
+#. module: odoogpt
+#: model:ir.model,name:odoogpt.model_res_partner
+msgid "Contact"
+msgstr "Contacto"
+
+#. module: odoogpt
+#: model:ir.model,name:odoogpt.model_mail_channel
+msgid "Discussion Channel"
+msgstr "Canal de conversaciones"
+
+#. module: odoogpt
+#. odoo-python
+#: code:addons/odoogpt/models/mail_message.py:0
+#, python-format
+msgid "I'm sorry. I couldn't find the requested information."
+msgstr "Lo lamento. No pude encontrar la información solicitada."
+
+#. module: odoogpt
+#: model:ir.model.fields,field_description:odoogpt.field_mail_channel__is_odoogpt_chat
+msgid "Is Odoogpt Chat"
+msgstr "Es el chat de Odoogpt"
+
+#. module: odoogpt
+#: model:ir.model.fields,field_description:odoogpt.field_res_users__last_view_model
+msgid "Last View Model"
+msgstr "Last View Model"
+
+#. module: odoogpt
+#: model:ir.model,name:odoogpt.model_mail_message
+msgid "Message"
+msgstr "Mensaje"
+
+#. module: odoogpt
+#. odoo-javascript
+#: code:addons/odoogpt/static/src/views/list/list_controller.xml:0
+#, python-format
+msgid "OdooGPT"
+msgstr ""
+
+#. module: odoogpt
+#: model:ir.model.fields,field_description:odoogpt.field_res_partner__odoogpt_channel_id
+#: model:ir.model.fields,field_description:odoogpt.field_res_users__odoogpt_channel_id
+msgid "Odoogpt Channel"
+msgstr "Odoogpt Channel"
+
+#. module: odoogpt
+#: model:ir.model,name:odoogpt.model_res_users
+msgid "User"
+msgstr "Usuario"
+
+#. module: odoogpt
+#: model:ir.model,name:odoogpt.model_ir_ui_view
+msgid "View"
+msgstr "Ver"
+
+#. module: odoogpt
+#: model:ir.model.fields,field_description:odoogpt.field_mail_channel__view_data
+msgid "View Data"
+msgstr "Ver datos"
+
+#. module: odoogpt
+#. odoo-python
+#: code:addons/odoogpt/models/mail_message.py:0
+#, python-format
+msgid ""
+"You are an Odoo assistant. You can have a conversation with the user.\n"
+"\n"
+"Try to respond promptly to user questions. If you don't know an answer, \n"
+"you can ask for more information or simply tell them that you don't know.\n"
+"\n"
+"{history}\n"
+"Human: {human_input}\n"
+"Assistant:"
+msgstr ""
+"Eres un asistente de Odoo. Puedes tener una conversación con el usuario.\n"
+"\n"
+"Intente responder rápidamente a las preguntas de los usuarios. Si no sabe una respuesta, \n"
+"Puedes pedir más información o simplemente decirles que no sabes.\n"
+"\n"
+"{history}\n"
+"Humano: {human_input}\n"
+"Asistente:"

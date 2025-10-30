@@ -3,9 +3,8 @@ import os
 import re
 import smtplib
 from abc import ABC, abstractmethod
-from datetime import datetime, date
+from datetime import datetime
 from email.message import EmailMessage
-from typing import List, Dict, Optional, Union
 
 import phonenumbers
 
@@ -26,13 +25,11 @@ def convert_dates(obj):
         return [convert_dates(item) for item in obj]
     elif isinstance(obj, datetime):
         return obj.isoformat()
-    elif isinstance(obj, date):
-        return obj.isoformat()
 
     return obj
 
 
-def format_phone_number(phone_number: str) -> Optional[str]:
+def format_phone_number(phone_number: str) -> str | None:
     if not phone_number.startswith("+"):
         phone_number = f"+34 {phone_number}"
 
@@ -50,7 +47,7 @@ def format_phone_number(phone_number: str) -> Optional[str]:
     return None
 
 
-def resume_chat(chat: List[dict], html_format: bool = True):
+def resume_chat(chat: list[dict], html_format: bool = True):
     _logger.debug("Resumiendo chat...")
     msg_base = """A continuación te paso una conversación entre un cliente y un asistente virtual. Necesito que resumas la conversación para que quede bien definida la intencion del cliente y se destaquen: el servicio que desea el cliente, los precios ofrecidos por el asistente, nombre del cliente y empresa a la que pertenece (si aparece)"""
 

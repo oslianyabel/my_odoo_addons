@@ -1,0 +1,11 @@
+openai
+python-dotenv
+psycopg2-binary
+phonenumbers
+flanker
+markdown2
+markupsafe
+PyPDF2
+python-docx
+openpyxl
+python-dateutil
